@@ -5,28 +5,46 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+const messageHistory = new Map();
+
+bot.on('message', (msg) => {
+  const chatId = msg.chat.id;
+  console.log(`Received message: ${msg.text} from ${msg.from?.first_name}`);
+  if (!messageHistory.has(chatId)) {
+    messageHistory.set(chatId, []);
+  }
+  const messages = messageHistory.get(chatId);
+  messages.push(msg);
+  console.log(`Stored ${messages.length} messages for chat ${chatId}`);
+  if (messages.length > 100) {
+    messages.shift();
+  }
+});
+
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, 'Hello! I can summarize your chat messages. Use /summarise to get a summary of the last 100 messages.');
+  bot.sendMessage(chatId, 'Hello! I can summarize your chat messages. Use /summarise to get a summary of recent messages.');
 });
 
 bot.onText(/\/summarise/, async (msg) => {
   const chatId = msg.chat.id;
   
   try {
-    bot.sendMessage(chatId, 'Fetching and summarizing messages...');
+    bot.sendMessage(chatId, 'Summarizing recent messages...');
     
-    const messages = await bot.getChatHistory(chatId, { limit: 100 });
+    const messages = messageHistory.get(chatId) || [];
     
-    if (!messages || messages.length === 0) {
-      bot.sendMessage(chatId, 'No messages to summarize.');
+    if (messages.length === 0) {
+      bot.sendMessage(chatId, 'No messages to summarize. Send some messages first!');
       return;
     }
     
     const messageTexts = messages
-      .filter(msg => msg.text)
+      .filter(msg => msg.text && !msg.text.startsWith('/'))
       .map(msg => `${msg.from?.first_name || 'User'}: ${msg.text}`)
       .join('\n');
+    
+    console.log(`Found ${messages.length} total messages, ${messageTexts.split('\n').filter(m => m.trim()).length} text messages`);
     
     if (!messageTexts) {
       bot.sendMessage(chatId, 'No text messages found to summarize.');
