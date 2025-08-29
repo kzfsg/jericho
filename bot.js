@@ -5,31 +5,53 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+bot.on('polling_error', (error) => {
+  console.error('Polling error:', error);
+});
+
+bot.on('error', (error) => {
+  console.error('Bot error:', error);
+});
+
 const messageHistory = new Map();
 
 bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  console.log(`Received message: ${msg.text} from ${msg.from?.first_name}`);
-  if (!messageHistory.has(chatId)) {
-    messageHistory.set(chatId, []);
-  }
-  const messages = messageHistory.get(chatId);
-  messages.push(msg);
-  console.log(`Stored ${messages.length} messages for chat ${chatId}`);
-  if (messages.length > 100) {
-    messages.shift();
-  }
-});
-
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, 'Hello! I can summarize your chat messages. Use /summarise to get a summary of recent messages.');
-});
-
-bot.onText(/\/summarise/, async (msg) => {
-  const chatId = msg.chat.id;
-  
+  console.log('=== NEW MESSAGE EVENT ===');
   try {
+    const chatId = msg.chat.id;
+    console.log(`Received message: "${msg.text}" from ${msg.from?.first_name} (Chat ID: ${chatId})`);
+    
+    if (!messageHistory.has(chatId)) {
+      messageHistory.set(chatId, []);
+      console.log(`Created new message history for chat ${chatId}`);
+    }
+    const messages = messageHistory.get(chatId);
+    messages.push(msg);
+    console.log(`Stored ${messages.length} messages for chat ${chatId}`);
+    if (messages.length > 100) {
+      messages.shift();
+    }
+
+    if (msg.text === '/start') {
+      console.log('Handling /start command');
+      bot.sendMessage(chatId, 'Hello! I can summarize your chat messages. Use /summarise to get a summary of recent messages.');
+      return;
+    }
+
+    if (msg.text === '/summarise') {
+      console.log('Handling /summarise command');
+      handleSummarize(chatId);
+      return;
+    }
+    
+    console.log('Message processed successfully');
+  } catch (error) {
+    console.error('Error in message handler:', error);
+  }
+});
+
+async function handleSummarize(chatId) {
+    try {
     bot.sendMessage(chatId, 'Summarizing recent messages...');
     
     const messages = messageHistory.get(chatId) || [];
@@ -51,7 +73,7 @@ bot.onText(/\/summarise/, async (msg) => {
       return;
     }
     
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const prompt = `Please provide a concise summary of the following chat messages:\n\n${messageTexts}`;
     
     const result = await model.generateContent(prompt);
@@ -63,6 +85,6 @@ bot.onText(/\/summarise/, async (msg) => {
     console.error('Error:', error);
     bot.sendMessage(chatId, 'Sorry, I encountered an error while summarizing the messages. Please try again later.');
   }
-});
+}
 
 console.log('Bot is running...');
