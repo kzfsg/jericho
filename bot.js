@@ -115,7 +115,7 @@ async function handleFavourite(chatId) {
     }
     
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const prompt = `From the following chat messages, please select your absolute favourite one and explain why. Be specific about who sent it and what makes it special or interesting to you:\n\n${messageTexts}\n\nPlease respond in this format:\n**Favourite Message:** [quote the exact message]\n**From:** [person's name]\n**Why I chose it:** [your explanation]`;
+    const prompt = `From the following chat messages, please select your absolute favourite one and explain why. Be specific about who sent it and what makes it special or interesting to you:\n\n${messageTexts}\n\nPlease respond in this format:\n[quote the exact message]\n**From:** [person's name]\n**Why I chose it:** [your explanation]`;
     
     const result = await model.generateContent(prompt);
     const favourite = result.response.text();
