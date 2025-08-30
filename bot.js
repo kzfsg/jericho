@@ -43,6 +43,12 @@ bot.on('message', (msg) => {
       handleSummarize(chatId);
       return;
     }
+
+    if (msg.text === '/favourite') {
+      console.log('Handling /favourite command');
+      handleFavourite(chatId);
+      return;
+    }
     
     console.log('Message processed successfully');
   } catch (error) {
@@ -84,6 +90,41 @@ async function handleSummarize(chatId) {
   } catch (error) {
     console.error('Error:', error);
     bot.sendMessage(chatId, 'Sorry, I encountered an error while summarizing the messages. Please try again later.');
+  }
+}
+
+async function handleFavourite(chatId) {
+  try {
+    bot.sendMessage(chatId, 'Finding my favourite message...');
+    
+    const messages = messageHistory.get(chatId) || [];
+    
+    if (messages.length === 0) {
+      bot.sendMessage(chatId, 'No messages to choose from. Send some messages first!');
+      return;
+    }
+    
+    const messageTexts = messages
+      .filter(msg => msg.text && !msg.text.startsWith('/'))
+      .map((msg, index) => `${index + 1}. ${msg.from?.first_name || 'User'}: ${msg.text}`)
+      .join('\n');
+    
+    if (!messageTexts) {
+      bot.sendMessage(chatId, 'No text messages found to choose from.');
+      return;
+    }
+    
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const prompt = `From the following chat messages, please select your absolute favourite one and explain why. Be specific about who sent it and what makes it special or interesting to you:\n\n${messageTexts}\n\nPlease respond in this format:\n**Favourite Message:** [quote the exact message]\n**From:** [person's name]\n**Why I chose it:** [your explanation]`;
+    
+    const result = await model.generateContent(prompt);
+    const favourite = result.response.text();
+    
+    bot.sendMessage(chatId, `💝 *My Favourite Message:*\n\n${favourite}`, { parse_mode: 'Markdown' });
+    
+  } catch (error) {
+    console.error('Error:', error);
+    bot.sendMessage(chatId, 'Sorry, I encountered an error while finding my favourite message. Please try again later.');
   }
 }
 
