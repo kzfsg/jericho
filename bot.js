@@ -38,9 +38,11 @@ bot.on('message', (msg) => {
       return;
     }
 
-    if (msg.text === '/summarise') {
+    if (msg.text?.startsWith('/summarise')) {
       console.log('Handling /summarise command');
-      handleSummarize(chatId);
+      const parts = msg.text.split(' ');
+      const count = parts.length > 1 ? parseInt(parts[1]) : null;
+      handleSummarize(chatId, count);
       return;
     }
 
@@ -56,36 +58,52 @@ bot.on('message', (msg) => {
   }
 });
 
-async function handleSummarize(chatId) {
+async function handleSummarize(chatId, count = null) {
     try {
-    bot.sendMessage(chatId, 'Summarizing recent messages...');
+    const requestedCount = count || 'recent';
+    bot.sendMessage(chatId, `Summarizing ${requestedCount === 'recent' ? 'recent' : requestedCount} messages...`);
     
-    const messages = messageHistory.get(chatId) || [];
+    const allMessages = messageHistory.get(chatId) || [];
     
-    if (messages.length === 0) {
+    if (allMessages.length === 0) {
       bot.sendMessage(chatId, 'No messages to summarize. Send some messages first!');
       return;
     }
+
+    // Filter out command messages first
+    const textMessages = allMessages.filter(msg => msg.text && !msg.text.startsWith('/'));
     
-    const messageTexts = messages
-      .filter(msg => msg.text && !msg.text.startsWith('/'))
-      .map(msg => `${msg.from?.first_name || 'User'}: ${msg.text}`)
-      .join('\n');
+    // If count is specified, take the last N messages, otherwise default to 100
+    const defaultCount = 100;
+    const actualCount = count && count > 0 ? count : defaultCount;
+    const messagesToSummarize = textMessages.slice(-actualCount);
     
-    console.log(`Found ${messages.length} total messages, ${messageTexts.split('\n').filter(m => m.trim()).length} text messages`);
-    
-    if (!messageTexts) {
+    if (messagesToSummarize.length === 0) {
       bot.sendMessage(chatId, 'No text messages found to summarize.');
       return;
     }
+
+    // Validate count parameter
+    if (actualCount > 0 && messagesToSummarize.length < actualCount) {
+      bot.sendMessage(chatId, `Only ${messagesToSummarize.length} text messages available, summarizing all of them.`);
+    }
     
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const messageTexts = messagesToSummarize
+      .map(msg => `${msg.from?.first_name || 'User'}: ${msg.text}`)
+      .join('\n');
+    
+    const finalCount = messagesToSummarize.length;
+    console.log(`Found ${allMessages.length} total messages, ${textMessages.length} text messages, summarizing ${finalCount} messages`);
+    
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
     const prompt = `Please provide a concise summary of the following chat messages:\n\n${messageTexts}`;
     
     const result = await model.generateContent(prompt);
     const summary = result.response.text();
     
-    bot.sendMessage(chatId, `📝 *Chat Summary:*\n\n${summary}`, { parse_mode: 'Markdown' });
+    // Escape markdown characters that could cause parsing errors
+    const escapedSummary = summary.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+    bot.sendMessage(chatId, `📝 *Chat Summary (${finalCount} messages):*\n\n${escapedSummary}`, { parse_mode: 'Markdown' });
     
   } catch (error) {
     console.error('Error:', error);
@@ -114,13 +132,15 @@ async function handleFavourite(chatId) {
       return;
     }
     
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
     const prompt = `From the following chat messages, please select your absolute favourite one and explain why. Be specific about who sent it and what makes it special or interesting to you:\n\n${messageTexts}\n\nPlease respond in this format:\n[quote the exact message]\n**From:** [person's name]\n**Why I chose it:** [your explanation]`;
     
     const result = await model.generateContent(prompt);
     const favourite = result.response.text();
     
-    bot.sendMessage(chatId, `💝 *My Favourite Message:*\n\n${favourite}`, { parse_mode: 'Markdown' });
+    // Escape markdown characters that could cause parsing errors
+    const escapedFavourite = favourite.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+    bot.sendMessage(chatId, `💝 *My Favourite Message:*\n\n${escapedFavourite}`, { parse_mode: 'Markdown' });
     
   } catch (error) {
     console.error('Error:', error);
